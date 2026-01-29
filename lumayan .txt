@@ -49,7 +49,7 @@ local player = Players.LocalPlayer
 -- 👑 VIP SYSTEM
 ---------------------------------------------------------------------
 
-local vipURL = "https://pastefy.app/TAjP5fXd/raw"
+local vipURL = "https://pastefy.app/sgDXiUqC/raw"
 local VIPList, isVIP = {}, false
 
 pcall(function()

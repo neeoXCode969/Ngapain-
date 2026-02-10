@@ -1,0 +1,219 @@
+--[[ 
+    STUDIOWALK FINAL FULL
+    FRAME BASED AUTOWALK + REWIND (ANTI FALL)
+]]
+
+-- =========================
+-- SERVICES & VAR
+-- =========================
+local lp = game.Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
+local recording = false
+local playback = false
+local rewinding = false
+local looping = false
+local playSpeed = 1
+
+local pathData = nil
+local currentIndex = 1
+
+if not isfolder("PrecisionRecs") then
+    makefolder("PrecisionRecs")
+end
+
+-- =========================
+-- FRAME CONVERTER
+-- =========================
+local function cfToFrame(cf)
+    return {
+        LookVector = {cf.LookVector.X, cf.LookVector.Y, cf.LookVector.Z},
+        UpVector   = {cf.UpVector.X,   cf.UpVector.Y,   cf.UpVector.Z},
+        Position   = {cf.Position.X,   cf.Position.Y,   cf.Position.Z}
+    }
+end
+
+local function frameToCf(frame)
+    local pos  = Vector3.new(unpack(frame.Position))
+    local look = Vector3.new(unpack(frame.LookVector))
+    local up   = Vector3.new(unpack(frame.UpVector))
+    local right = look:Cross(up)
+    return CFrame.fromMatrix(pos, right, up)
+end
+
+-- =========================
+-- GUI
+-- =========================
+local gui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0,300,0,260)
+frame.Position = UDim2.new(0.5,-150,0.5,-130)
+frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+frame.Active = true
+frame.Draggable = true
+Instance.new("UICorner", frame)
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1,0,0,40)
+title.Text = "STUDIOWALK FINAL"
+title.Font = Enum.Font.GothamBlack
+title.TextSize = 18
+title.TextColor3 = Color3.new(1,1,1)
+title.BackgroundTransparency = 1
+
+local status = Instance.new("TextLabel", frame)
+status.Size = UDim2.new(1,0,0,20)
+status.Position = UDim2.new(0,0,0,40)
+status.Text = "READY"
+status.Font = Enum.Font.GothamBold
+status.TextSize = 11
+status.TextColor3 = Color3.new(1,1,1)
+status.BackgroundTransparency = 1
+
+local function btn(text,y)
+    local b = Instance.new("TextButton", frame)
+    b.Size = UDim2.new(0.9,0,0,28)
+    b.Position = UDim2.new(0.05,0,y,0)
+    b.Text = text
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 12
+    b.TextColor3 = Color3.new(1,1,1)
+    b.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    Instance.new("UICorner", b)
+    return b
+end
+
+local recBtn   = btn("🔴 REC",0.30)
+local playBtn  = btn("▶ PLAY",0.45)
+local rewindBtn= btn("⏪ REWIND",0.60)
+local loopBtn  = btn("🔁 LOOP",0.75)
+local speedBtn = btn("⚡ SPEED: 1x",0.90)
+
+-- =========================
+-- RECORD
+-- =========================
+RunService.Heartbeat:Connect(function()
+    if recording and not playback and not rewinding then
+        local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            table.insert(pathData.Frames, cfToFrame(root.CFrame))
+        end
+    end
+end)
+
+-- =========================
+-- CORE MOVE
+-- =========================
+local function moveFrame(root, cf1, cf2)
+    local a = 0
+    while a < 1 and (playback or rewinding) do
+        a += RunService.Heartbeat:Wait() * (0.08 * playSpeed)
+        root.CFrame = cf1:Lerp(cf2, a)
+    end
+end
+
+-- =========================
+-- PLAY
+-- =========================
+local function playPath()
+    if not pathData or #pathData.Frames < 2 then return end
+    playback = true
+    rewinding = false
+    status.Text = "PLAYING"
+
+    local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    for i = currentIndex, #pathData.Frames-1 do
+        if not playback then break end
+        currentIndex = i
+        moveFrame(root,
+            frameToCf(pathData.Frames[i]),
+            frameToCf(pathData.Frames[i+1])
+        )
+    end
+
+    playback = false
+    status.Text = "READY"
+    if looping then
+        currentIndex = 1
+        playPath()
+    end
+end
+
+-- =========================
+-- REWIND
+-- =========================
+local function rewindPath()
+    if not pathData or #pathData.Frames < 2 then return end
+    rewinding = true
+    playback = false
+    status.Text = "REWIND"
+
+    local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    for i = currentIndex, 2, -1 do
+        if not rewinding then break end
+        currentIndex = i
+        moveFrame(root,
+            frameToCf(pathData.Frames[i]),
+            frameToCf(pathData.Frames[i-1])
+        )
+    end
+
+    rewinding = false
+    status.Text = "READY"
+end
+
+-- =========================
+-- BUTTONS
+-- =========================
+recBtn.MouseButton1Click:Connect(function()
+    recording = not recording
+    if recording then
+        pathData = {Selected=false,Frames={}}
+        currentIndex = 1
+        status.Text = "RECORDING"
+        recBtn.Text = "⏹ STOP"
+    else
+        status.Text = "REC STOP"
+        recBtn.Text = "🔴 REC"
+    end
+end)
+
+playBtn.MouseButton1Click:Connect(function()
+    if playback then
+        playback = false
+    else
+        task.spawn(playPath)
+    end
+end)
+
+rewindBtn.MouseButton1Click:Connect(function()
+    if rewinding then
+        rewinding = false
+    else
+        task.spawn(rewindPath)
+    end
+end)
+
+loopBtn.MouseButton1Click:Connect(function()
+    looping = not looping
+    loopBtn.BackgroundColor3 = looping and Color3.fromRGB(70,150,90) or Color3.fromRGB(50,50,50)
+end)
+
+speedBtn.MouseButton1Click:Connect(function()
+    playSpeed = (playSpeed % 5) + 1
+    speedBtn.Text = "⚡ SPEED: "..playSpeed.."x"
+end)
+
+-- =========================
+-- AUTO SAVE
+-- =========================
+gui.AncestryChanged:Connect(function()
+    if pathData and #pathData.Frames > 10 then
+        writefile("PrecisionRecs/autosave.json",HttpService:JSONEncode(pathData))
+    end
+end)
